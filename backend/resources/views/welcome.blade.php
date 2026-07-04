@@ -1,1 +1,0 @@
-LOAD_FROM:/tmp/mcp-content/welcome.txt
