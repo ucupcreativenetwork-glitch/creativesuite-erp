@@ -26,6 +26,17 @@ mobile/      APK Android (CreativeSuite HR)
 - **Email:** admin@demo.id
 - **Password:** Password123
 
+## Panduan Instalasi & Konfigurasi
+
+| Dokumen | Isi |
+|---------|-----|
+| [deploy/PANDUAN-TERIMA-BERSIH.md](deploy/PANDUAN-TERIMA-BERSIH.md) | Deploy pertama — tinggal klik (Windows/Ubuntu) |
+| [deploy/PANDUAN-LENGKAP.md](deploy/PANDUAN-LENGKAP.md) | Panduan lengkap development & production |
+| [deploy/DEPLOY.md](deploy/DEPLOY.md) | Referensi deploy manual |
+| [deploy/UBUNTU-22.md](deploy/UBUNTU-22.md) | Spesifik Ubuntu 22.04 |
+| [deploy/CHECKLIST-PRODUCTION.md](deploy/CHECKLIST-PRODUCTION.md) | Checklist sebelum go-live |
+| [deploy/GITHUB-SECRETS.md](deploy/GITHUB-SECRETS.md) | Setup auto-deploy via GitHub Actions |
+
 ## Deploy Manual
 
 ```bash
@@ -36,9 +47,11 @@ chmod +x *.sh
 ./deploy-from-ubuntu.sh update  # update
 ```
 
+Windows: double-click `deploy/TERIMA-BERSIH.bat` (deploy pertama) atau `deploy/UPDATE-SERVER.bat` (update).
+
 ## Deploy via GitHub Actions
 
-Push ke branch `main` akan otomatis deploy ke server production (butuh secrets GitHub).
+Push ke branch `main` akan otomatis deploy ke server production. Lihat [deploy/GITHUB-SECRETS.md](deploy/GITHUB-SECRETS.md).
 
 ## Development
 
