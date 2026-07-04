@@ -1,0 +1,39 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Build artifacts
+frontend/.next/
+backend/public/build/
+backend/public/hot/
+
+# Environment
+**/.env
+**/.env.*
+!**/.env.example
+!deploy/env/*.example
+
+# Laravel / PHP
+**/.phpunit.result.cache
+**/.phpunit.cache
+backend/storage/*.key
+backend/storage/logs/*
+!backend/storage/logs/.gitignore
+backend/storage/framework/cache/*
+!backend/storage/framework/cache/.gitignore
+backend/storage/framework/sessions/*
+!backend/storage/framework/sessions/.gitignore
+backend/storage/framework/views/*
+!backend/storage/framework/views/.gitignore
+backend/storage/app/public/*
+!backend/storage/app/public/.gitignore
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Mobile APK (large binary)
+mobile/*.apk

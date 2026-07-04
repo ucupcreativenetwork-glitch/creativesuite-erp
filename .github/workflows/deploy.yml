@@ -1,0 +1,57 @@
+name: CreativeSuite ERP Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package release
+        run: |
+          zip -r creativesuite-erp-release.zip . \
+            -x "**/.git/*" "**/node_modules/*" "**/vendor/*" \
+               "frontend/.next/*" "**/.env" "**/.env.*"
+
+      - name: Upload & deploy via SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: creativesuite-erp-release.zip
+          target: /tmp/
+
+      - name: Run update script
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            sudo rm -rf /tmp/creativesuite-release
+            sudo mkdir -p /tmp/creativesuite-release
+            sudo unzip -o /tmp/creativesuite-erp-release.zip -d /tmp/creativesuite-release
+            cd /tmp/creativesuite-release
+            sudo SERVER_IP=${{ secrets.DEPLOY_HOST }} bash deploy/scripts/update-linux.sh
+            echo "Deploy completed at $(date)"
+
+      - name: Health check
+        run: |
+          sleep 10
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DEPLOY_HOST }}/up)
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed: $STATUS"
+            exit 1
+          fi
+          echo "Health check passed"
