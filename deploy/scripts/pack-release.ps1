@@ -20,6 +20,7 @@ $ZipPath = Join-Path $DeployDir "creativesuite-erp-release-$Timestamp.zip"
 Write-Host "=== Pack CreativeSuite ERP Release ===" -ForegroundColor Cyan
 Write-Host "Server IP: $ServerIp"
 
+# Bersihkan release lama
 if (Test-Path $ReleaseDir) { Remove-Item $ReleaseDir -Recurse -Force }
 New-Item -ItemType Directory -Force -Path `
     (Join-Path $ReleaseDir "backend"), `
@@ -34,6 +35,7 @@ robocopy $BackendSrc (Join-Path $ReleaseDir "backend") /MIR `
     /NFL /NDL /NJH /NJS /nc /ns /np
 if ($LASTEXITCODE -ge 8) { throw "robocopy backend gagal: $LASTEXITCODE" }
 
+# Pastikan folder storage ada
 @("storage\app\public", "storage\framework\cache", "storage\framework\sessions", "storage\framework\views", "storage\logs") | ForEach-Object {
     New-Item -ItemType Directory -Force -Path (Join-Path $ReleaseDir "backend\$_") | Out-Null
 }
@@ -49,17 +51,21 @@ if ($SkipFrontendBuild) {
     $feEnvProd = Join-Path $FrontendSrc ".env.production"
     $feEnvBackup = $null
     if (Test-Path $feEnvProd) { $feEnvBackup = Get-Content $feEnvProd -Raw }
+
     @"
 NEXT_PUBLIC_API_URL=http://${ServerIp}/api/v1
 NEXT_PUBLIC_APP_NAME=CreativeSuite ERP
 "@ | Set-Content $feEnvProd
+
     Set-Location $FrontendSrc
     npm run build
     if ($LASTEXITCODE -ne 0) { throw "npm run build gagal" }
+
     if ($feEnvBackup) { $feEnvBackup | Set-Content $feEnvProd } else { Remove-Item $feEnvProd -ErrorAction SilentlyContinue }
 }
 
 Write-Host "[3/5] Copy frontend build..."
+# Hanya file yang dibutuhkan production (hindari .next/dev cache yang besar)
 $feDest = Join-Path $ReleaseDir "frontend"
 @("package.json", "package-lock.json", "next.config.ts", "next.config.mjs", "next.config.js", "tsconfig.json", "postcss.config.mjs", ".env.production") | ForEach-Object {
     $src = Join-Path $FrontendSrc $_
@@ -68,7 +74,8 @@ $feDest = Join-Path $ReleaseDir "frontend"
 if (Test-Path (Join-Path $FrontendSrc "public")) {
     robocopy (Join-Path $FrontendSrc "public") (Join-Path $feDest "public") /E /NFL /NDL /NJH /NJS /nc /ns /np
 }
-robocopy (Join-Path $FrontendSrc ".next") (Join-Path $feDest ".next") /E /XD cache dev /NFL /NDL /NJH /NJS /nc /ns /np
+robocopy (Join-Path $FrontendSrc ".next") (Join-Path $feDest ".next") /E `
+    /XD cache dev /NFL /NDL /NJH /NJS /nc /ns /np
 if ($LASTEXITCODE -ge 8) { throw "robocopy frontend gagal" }
 
 Write-Host "[4/5] Copy mobile APK..."
@@ -76,34 +83,68 @@ $apk = Join-Path $MobileSrc "dist\CreativeSuite-HR.apk"
 if (Test-Path $apk) {
     Copy-Item $apk (Join-Path $ReleaseDir "mobile\CreativeSuite-HR.apk")
 } else {
-    Write-Host "  APK tidak ditemukan - lewati" -ForegroundColor Yellow
+    Write-Host "  APK tidak ditemukan - lewati (build: npm run build:apk di folder mobile)" -ForegroundColor Yellow
 }
 
 Write-Host "[5/6] Copy deploy scripts dan dokumentasi..."
-robocopy $DeployDir (Join-Path $ReleaseDir "deploy") /E /XD release docs creativesuite-deploy-kit-* /XF creativesuite-erp-release-*.zip creativesuite-deploy-kit-*.zip /NFL /NDL /NJH /NJS /nc /ns /np
-@("CreativeSuite-ERP-Manual-Book.docx", "PANDUAN-LENGKAP.md", "PANDUAN-TERIMA-BERSIH.md", "UBUNTU-22.md", "DEPLOY.md", "CHECKLIST-PRODUCTION.md") | ForEach-Object {
+robocopy $DeployDir (Join-Path $ReleaseDir "deploy") /E `
+    /XD release docs creativesuite-deploy-kit-* `
+    /XF creativesuite-erp-release-*.zip creativesuite-deploy-kit-*.zip `
+    /NFL /NDL /NJH /NJS /nc /ns /np
+@(
+    "CreativeSuite-ERP-Manual-Book.docx",
+    "PANDUAN-LENGKAP.md",
+    "PANDUAN-TERIMA-BERSIH.md",
+    "UBUNTU-22.md",
+    "DEPLOY.md",
+    "CHECKLIST-PRODUCTION.md"
+) | ForEach-Object {
     $src = Join-Path $DeployDir $_
     if (Test-Path $src) { Copy-Item $src (Join-Path $ReleaseDir "deploy\$_") -Force }
 }
+
+# Script auto-deploy (untuk update dari Windows)
 @("deploy-config.ps1", "auto-deploy.ps1", "preflight-check.ps1", "pack-deploy-kit.ps1") | ForEach-Object {
     $src = Join-Path $DeployDir "scripts\$_"
     if (Test-Path $src) { Copy-Item $src (Join-Path $ReleaseDir "deploy\scripts\$_") -Force }
 }
+
+# Launcher batch (root deploy folder)
 @("TERIMA-BERSIH.bat", "UPDATE-SERVER.bat") | ForEach-Object {
     $src = Join-Path $DeployDir $_
     if (Test-Path $src) { Copy-Item $src (Join-Path $ReleaseDir "deploy\$_") -Force }
 }
+
+# Versi release
 $versionFile = Join-Path $ReleaseDir "VERSION.txt"
-@"CreativeSuite ERP Release`nBuilt: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")`nServer IP: $ServerIp"@ | Set-Content $versionFile
+@"
+CreativeSuite ERP Release
+Built: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Server IP: $ServerIp
+"@ | Set-Content $versionFile
+
 Write-Host "[6/6] Buat ZIP..."
+
+# Patch env templates dengan IP server
 $beEnv = Join-Path $ReleaseDir "deploy\env\backend.env.production"
 $feEnv = Join-Path $ReleaseDir "deploy\env\frontend.env.production"
 (Get-Content $beEnv) -replace '192\.168\.1\.102|10\.110\.1\.15', $ServerIp | Set-Content $beEnv
 (Get-Content $feEnv) -replace '192\.168\.1\.102|10\.110\.1\.15', $ServerIp | Set-Content $feEnv
 (Get-Content (Join-Path $ReleaseDir "deploy\nginx\creativesuite.conf")) -replace '192\.168\.1\.102|10\.110\.1\.15', $ServerIp | Set-Content (Join-Path $ReleaseDir "deploy\nginx\creativesuite.conf")
+
 if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
 Compress-Archive -Path (Join-Path $ReleaseDir "*") -DestinationPath $ZipPath -CompressionLevel Optimal
+
 $zipSize = [math]::Round((Get-Item $ZipPath).Length / 1MB, 1)
+Write-Host ""
 Write-Host "==========================================" -ForegroundColor Green
-Write-Host "  Release siap deploy! ZIP: $ZipPath - $zipSize MB"
+Write-Host "  Release siap deploy!"
+Write-Host "=========================================="
+Write-Host "  Folder: $ReleaseDir"
+Write-Host "  ZIP:    $ZipPath - $zipSize MB"
+Write-Host ""
+Write-Host "  Auto deploy (disarankan):"
+Write-Host "    cd scripts && .\auto-deploy.ps1 -Mode Fresh"
+Write-Host "  Atau manual di server:"
+Write-Host "    sudo SERVER_IP=$ServerIp bash deploy/scripts/install-linux.sh"
 Write-Host "=========================================="
