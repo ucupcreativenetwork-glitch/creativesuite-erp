@@ -1,0 +1,85 @@
+# CreativeSuite ERP — Docker production (opsional)
+# Jalankan di server yang sudah install Docker:
+#   cp env/backend.env.production .env
+#   docker compose -f docker-compose.production.yml up -d --build
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-changeme_root}
+      MYSQL_DATABASE: ${DB_DATABASE:-creativesuite_erp}
+      MYSQL_USER: ${DB_USERNAME:-creativesuite}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-changeme_db}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../creativesuite-erp
+      dockerfile: ../creativesuite-deploy/Dockerfile.production
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: mysql
+      APP_ENV: production
+      APP_DEBUG: "false"
+    volumes:
+      - backend_storage:/var/www/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "php artisan migrate --force &&
+             php artisan db:seed --force &&
+             php artisan storage:link --force &&
+             php artisan config:cache &&
+             php artisan serve --host=0.0.0.0 --port=8000"
+
+  queue:
+    build:
+      context: ../creativesuite-erp
+      dockerfile: ../creativesuite-deploy/Dockerfile.production
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: mysql
+    depends_on:
+      - backend
+    command: php artisan queue:work database --sleep=3 --tries=3
+
+  scheduler:
+    build:
+      context: ../creativesuite-erp
+      dockerfile: ../creativesuite-deploy/Dockerfile.production
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: mysql
+    depends_on:
+      - backend
+    command: php artisan schedule:work
+
+  frontend:
+    build:
+      context: ../creativesuite-erp-frontend
+      dockerfile: ../creativesuite-deploy/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  backend_storage:
